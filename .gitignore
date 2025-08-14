@@ -1,0 +1,26 @@
+# local env & creds
+.env
+*.tfvars
+*.pem
+*.key
+*.p12
+.aws/
+*.zip
+# caches & build
+__pycache__/
+*.pyc
+node_modules/
+.DS_Store
+*.log
+# local scratch
+/tmp/
+
+# Lambda build artifacts (only commit app.py + requirements.txt)
+lambdas/**/*
+!lambdas/**/app.py
+!lambdas/**/requirements.txt
+
+# Zip bundles
+*.zip
+*.tar.gz
+*.tgz

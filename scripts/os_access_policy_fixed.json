@@ -1,0 +1,18 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowRootAndServiceRoles",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": [
+          "<aws-arn-placeholder>",
+          "<aws-arn-placeholder>",
+          "<aws-arn-placeholder>"
+        ]
+      },
+      "Action": "es:ESHttp*",
+      "Resource": "<aws-arn-placeholder>"
+    }
+  ]
+}

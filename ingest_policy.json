@@ -1,0 +1,20 @@
+{
+  "Version":"2012-10-17",
+  "Statement":[
+    {"Effect":"Allow","Action":["s3:GetObject","s3:PutObject"],
+     "Resource":"<aws-arn-placeholder>"},
+
+    {"Effect":"Allow","Action":"dynamodb:*",
+     "Resource":"<aws-arn-placeholder>"},
+
+    {"Effect":"Allow","Action":["bedrock:InvokeModel","bedrock:InvokeModelWithResponseStream"],
+     "Resource":"*"},
+
+    {"Effect":"Allow","Action":"es:ESHttp*",
+     "Resource":"<aws-arn-placeholder>"},
+
+    {"Effect":"Allow","Action":
+       ["logs:CreateLogGroup","logs:CreateLogStream","logs:PutLogEvents"],
+     "Resource":"*"}
+  ]
+}

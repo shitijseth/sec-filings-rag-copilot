@@ -1,0 +1,26 @@
+{
+  "Comment": "SEC Copilot ingestion",
+  "StartAt": "ExtractClean",
+  "States": {
+    "ExtractClean": {
+      "Type": "Task",
+      "Resource": "<aws-arn-placeholder>",
+      "Parameters": {
+        "FunctionName": "sec-extract-clean",
+        "Payload.$": "$"
+      },
+      "OutputPath": "$.Payload",
+      "Next": "ChunkEmbed"
+    },
+    "ChunkEmbed": {
+      "Type": "Task",
+      "Resource": "<aws-arn-placeholder>",
+      "Parameters": {
+        "FunctionName": "sec-chunk-embed",
+        "Payload.$": "$"
+      },
+      "OutputPath": "$.Payload",
+      "End": true
+    }
+  }
+}
