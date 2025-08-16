@@ -24,3 +24,8 @@ lambdas/**/*
 *.zip
 *.tar.gz
 *.tgz
+
+# eval artifacts
+# legacy: remove if present
+-eval/out/
++eval/out/

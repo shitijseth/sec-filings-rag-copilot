@@ -1,0 +1,6 @@
+{"id":"aapl_supply_chain_risk","query":"Where does Apple discuss supply-chain risk?","expected_items":["Item 1A"],"keywords":["supply","risk"],"ticker":"AAPL","filing_type":"10-K","filing_year":2023}
+{"id":"aapl_fiscal_year_end","query":"When does Apple’s fiscal year end?","expected_items":["Item 1"],"keywords":["fiscal year","last Saturday of September"],"ticker":"AAPL","filing_type":"10-K","filing_year":2023}
+{"id":"aapl_cash_note","query":"Where are Apple’s cash and cash equivalents reported in the filing?","expected_items":["Item 8"],"keywords":["Financial Statements","Consolidated","cash"],"ticker":"AAPL","filing_type":"10-K","filing_year":2023}
+{"id":"aapl_rd_spend","query":"What did Apple spend on R&D in 2023 and where is it discussed?","expected_items":["Item 7","Item 8"],"keywords":["research and development","operating expenses"],"ticker":"AAPL","filing_type":"10-K","filing_year":2023}
+{"id":"aapl_business_overview","query":"Which section gives Apple’s high-level business overview?","expected_items":["Item 1"],"keywords":["business","company"],"ticker":"AAPL","filing_type":"10-K","filing_year":2023}
+{"id":"aapl_liquidity","query":"Where does Apple discuss liquidity and capital resources?","expected_items":["Item 7"],"keywords":["liquidity","capital resources"],"ticker":"AAPL","filing_type":"10-K","filing_year":2023}
