@@ -1,0 +1,14 @@
+{"id":"aapl_supply_chain_risk","query":"Where does Apple discuss supply-chain risk?","expected_items":["Item 1A"],"keywords":["supply","risk"],"ticker":"AAPL","filing_type":"10-K","filing_year":2023}
+{"id":"aapl_fiscal_year_end","query":"When does Apple’s fiscal year end?","expected_items":["Item 1"],"keywords":["fiscal year","last Saturday of September"],"ticker":"AAPL","filing_type":"10-K","filing_year":2023}
+{"id":"aapl_cash_note","query":"Where are Apple’s cash and cash equivalents reported in the filing?","expected_items":["Item 8"],"keywords":["Financial Statements","Consolidated","cash"],"ticker":"AAPL","filing_type":"10-K","filing_year":2023}
+{"id":"aapl_liquidity","query":"Where does Apple discuss liquidity and capital resources?","expected_items":["Item 7"],"keywords":["liquidity","capital resources"],"ticker":"AAPL","filing_type":"10-K","filing_year":2023}
+
+{"id":"msft_risk_factors","query":"Where does Microsoft discuss risk factors?","expected_items":["Item 1A"],"keywords":["risk factors"],"ticker":"MSFT","filing_type":"10-K","filing_year":2023}
+{"id":"msft_fiscal_year_end","query":"When does Microsoft’s fiscal year end?","expected_items":["Item 1"],"keywords":["June 30"],"ticker":"MSFT","filing_type":"10-K","filing_year":2023}
+{"id":"msft_mda_liquidity","query":"Where does Microsoft discuss liquidity and capital resources?","expected_items":["Item 7"],"keywords":["liquidity","capital resources","MD&A"],"ticker":"MSFT","filing_type":"10-K","filing_year":2023}
+{"id":"msft_financial_statements","query":"Which section contains Microsoft’s consolidated financial statements?","expected_items":["Item 8"],"keywords":["consolidated","statements"],"ticker":"MSFT","filing_type":"10-K","filing_year":2023}
+
+{"id":"amzn_risk_factors","query":"Where does Amazon discuss risk factors?","expected_items":["Item 1A"],"keywords":["risk"],"ticker":"AMZN","filing_type":"10-K","filing_year":2023}
+{"id":"amzn_business_overview","query":"Which section gives Amazon’s high-level business overview?","expected_items":["Item 1"],"keywords":["business","overview"],"ticker":"AMZN","filing_type":"10-K","filing_year":2023}
+{"id":"amzn_financials","query":"Which section contains Amazon’s consolidated financial statements?","expected_items":["Item 8"],"keywords":["consolidated","financial statements"],"ticker":"AMZN","filing_type":"10-K","filing_year":2023}
+{"id":"amzn_mdna","query":"Where does Amazon discuss Management’s Discussion and Analysis?","expected_items":["Item 7"],"keywords":["MD&A","management’s discussion"],"ticker":"AMZN","filing_type":"10-K","filing_year":2023}
