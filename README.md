@@ -45,144 +45,171 @@ API Gateway (`POST /chat`) → `router` Lambda → **OpenSearch** (retrieve) →
 cp .env.example .env
 # edit .env with your endpoints/IDs/region, then:
 export $(grep -v '^#' .env | xargs)
-Create OpenSearch index:
+```
 
-bash
-Copy
-Edit
+2) Create OpenSearch index:
+```bash
 python3 scripts/create_index.py
-Download + ingest a few filings:
+```
 
-bash
-Copy
-Edit
+3) Download + ingest a few filings:
+
+```bash
 bash scripts/download_sec.sh    # writes to your S3 bucket
 # Deploy/attach Step Functions to run extract_clean → chunk_embed for embeddings
-Serve the API (Router Lambda + API Gateway):
+```
 
-lambdas/router/app.py (uses env vars below)
+4) Serve the API (Router Lambda + API Gateway):
+- lambdas/router/app.py (uses env vars below)
+- API Gateway route POST /chat → Router Lambda
+- DynamoDB table (e.g., sec_copilot_cache) with TTL on ttl
 
-API Gateway route POST /chat → Router Lambda
-
-DynamoDB table (e.g., sec_copilot_cache) with TTL on ttl
-
-Smoke test:
-
-bash
-Copy
-Edit
+5) Smoke test:
+```bash
 # API_URL should look like: https://<api-id>.execute-api.<region>.amazonaws.com
 curl -s -X POST "${API_URL%/}/chat" \
   -H 'Content-Type: application/json' \
   -d '{"query":"Where does Apple discuss supply-chain risk?"}' | jq .
-Configuration (Lambda env vars)
-VariablePurpose
-OPENSEARCH_ENDPOINTOpenSearch domain (no https://)
-OPENSEARCH_INDEXe.g., kb_chunks
-BEDROCK_EMBED_MODEL_IDe.g., amazon.titan-embed-text-v2:0
-BEDROCK_TEXT_MODEL_IDprimary (e.g., anthropic.claude-3-haiku-20240307-v1:0 or meta.llama3-3-70b-instruct-v1:0)
-BEDROCK_TEXT_MODEL_FALLBACK_IDfallback model id
-CACHE_TABLEDynamoDB cache table (TTL enabled on ttl)
-AWS_REGIONe.g., us-east-2
+```
 
-API
-Endpoint: POST /chat
-Request:
+---
 
-json
-Copy
-Edit
+## Configuration (Lambda env vars)
+
+| Variable | Example | Purpose |
+|---|---|---|
+| OPENSEARCH_ENDPOINT | search-xxxxx.us-east-2.es.amazonaws.com | OpenSearch domain host (no scheme). |
+| OPENSEARCH_INDEX | kb_chunks | Name of the k-NN index. |
+| BEDROCK_EMBED_MODEL_ID | amazon.titan-embed-text-v2:0 | Embedding model for chunk vectors. |
+| BEDROCK_TEXT_MODEL_ID | anthropic.claude-3-haiku-20240307-v1:0 | Primary text model for answers. |
+| BEDROCK_TEXT_MODEL_FALLBACK_ID | meta.llama3-3-70b-instruct-v1:0 | Fallback text model. |
+| CACHE_TABLE | sec_copilot_cache | DynamoDB cache table (TTL enabled on "ttl"). |
+| AWS_REGION | us-east-2 | Region for Bedrock/OpenSearch/DynamoDB. |
+
+---
+
+## API
+
+**Endpoint:** `POST /chat`  
+**Returns:** One-sentence answer + 2-3 quoted bullets with SEC citations.
+
+**Request**
+```json
 { "query": "Where does Apple discuss supply-chain risk?" }
-Response (example):
+```
 
-json
-Copy
-Edit
+**Response (example)**
+```json
 {
-  "answer": "Apple discusses supply-chain risk in Item 1A (“Risk Factors”) and references in Item 8 notes.\n* ... [AAPL 2023 10-K — Item 1A]\n* ... [AAPL 2023 10-K — Item 8]"
+  "answer": "Apple discusses supply-chain risk in Item 1A (Risk Factors) and references in Item 8 notes.\n* ... [AAPL 2023 10-K - Item 1A]\n* ... [AAPL 2023 10-K - Item 8]"
 }
-Behavior: one-sentence answer + 2–3 quoted bullets with citations. If unsupported, the API suggests likely sections (Item 1A, 7, or 8).
+```
 
-Evaluation (latest)
-Low-cost eval across AAPL/MSFT/AMZN 2023 10-Ks (12 Qs total, ~50% repeats leveraging cache).
+**cURL smoke test**
+```bash
+# API_URL should look like: https://<api-id>.execute-api.<region>.amazonaws.com
+curl -s -X POST "${API_URL%/}/chat"   -H 'Content-Type: application/json'   -d '{"query":"Where does Apple discuss supply-chain risk?"}' | jq .
+```
 
-Overall
+---
 
-CIM@Item (accuracy): 0.833
+## Architecture
 
-MQS@2+quotes: 0.917
+![Architecture](docs/arch.png)
 
-KC@keywords(avg): 0.931
+Ingest (batch/offline): S3 -> Step Functions -> Lambda (extract + chunk + embed) -> Bedrock Titan Embeddings -> OpenSearch (kNN).  
+Serve (real-time): API Gateway -> Lambda router -> OpenSearch retrieve -> Bedrock (primary/fallback) -> DynamoDB cache (TTL).
 
-Latency p50 / p95: 2271 ms / 3106 ms
+---
 
-Stability (avg): 0.732
+## Evaluation (latest)
 
-Repeats: 4 (cache reduces LLM spend)
+Low-cost eval across AAPL/MSFT/AMZN 2023 10-Ks (12 questions total; ~50% repeats leverage cache).
 
-Per filing
+### Overall
+| Metric | Value |
+|---|---|
+| N (questions) | 12 |
+| Repeats | 4 |
+| CIM@Item (accuracy) | 0.833 |
+| MQS@2+ quotes | 0.917 |
+| KC@keywords (avg) | 0.931 |
+| Latency p50 / p95 (ms) | 2271 / 3106 |
+| Stability (avg) | 0.732 |
 
-AAPL 2023 10-K — N=4 • CIM=1.00 • MQS=0.75 • KC=1.00 • p50=1891 ms
+### Per filing
+| Filing | N | CIM | MQS | KC | p50 (ms) |
+|---|---|---|---|---|---|
+| AAPL 2023 10-K | 4 | 1.00 | 0.75 | 1.000 | 1891 |
+| MSFT 2023 10-K | 4 | 0.75 | 1.00 | 0.917 | 2244 |
+| AMZN 2023 10-K | 4 | 0.75 | 1.00 | 0.875 | 2693 |
 
-MSFT 2023 10-K — N=4 • CIM=0.75 • MQS=1.00 • KC=0.917 • p50=2244 ms
-
-AMZN 2023 10-K — N=4 • CIM=0.75 • MQS=1.00 • KC=0.875 • p50=2693 ms
-
-Reproduce:
-
-bash
-Copy
-Edit
-# single-ticker sample
+**Reproduce locally**
+```bash
+# Single-ticker sample (6 questions)
 python3 eval/run_eval.py "$API_URL" eval/questions.jsonl --repeat
-# multi-ticker (12 Qs + ~50% repeats)
+
+# Multi-ticker (12 questions, ~50% repeats for cache savings)
 python3 eval/run_eval.py "$API_URL" eval/questions_multi.jsonl --repeat --repeat-frac 0.5
-Cost story (practical)
-Serverless & pay-per-request; no idle compute.
+```
 
-Largest driver is text generation → pick small models + modest max_tokens.
+**Metric definitions**
+- CIM (Citation-Item Match): any cited bracket includes the expected Item label (for example, "Item 1A").
+- MQS (Minimum Quote Support): answer includes at least 2 quoted bullets.
+- KC (Keyword Coverage): fraction of expected keywords present in the answer.
+- Stability: token-set similarity between first and repeated answers.
 
-DynamoDB TTL cache avoids repeated LLM calls (esp. evals & common queries).
+---
 
-Titan Embeddings v2 are inexpensive; chunk ~500–800 tokens with overlap.
+## Cost story
 
-Start with a small OpenSearch dev domain; scale shards/replicas later.
+- Serverless, pay-per-request architecture.
+- DynamoDB cache with TTL cuts repeat LLM calls to near-zero.
+- Efficient primary model with fallback only on failure or low confidence.
+- OpenSearch dev-sized domain; scale shards/replicas only when required.
+- Titan Embeddings v2; chunk size ~500-800 tokens with small overlap.
 
-Security & privacy
-No secrets in Git: use .env locally, Lambda env vars in AWS.
+---
 
-IDs/ARNs sanitized for public repo; optional scanning with trufflehog.
+## Security and privacy
 
-Data stays in your AWS account (Bedrock/OpenSearch/DynamoDB).
+- No secrets in repo; use `.env` locally and Lambda environment variables in AWS.
+- Repo sanitized (IDs/ARNs redacted). Optional scans with `trufflehog`.
+- Data stays within your AWS account (Bedrock, OpenSearch, DynamoDB).
 
-Repo layout
-bash
-Copy
-Edit
+---
+
+## Repository layout
+
+```
 app_code/langgraph_app/      # retrieval helpers (search, prompts)
 lambdas/
   extract_clean/app.py       # parse & clean filings
-  chunk_embed/app.py         # chunk + Titan embeddings → OpenSearch
+  chunk_embed/app.py         # chunk + embeddings -> OpenSearch
   router/app.py              # /chat: retrieval + generation + cache
 scripts/
-  create_index.py            # OpenSearch index (vector mappings)
-  download_sec.sh            # sample fetch of 10-Ks from SEC
+  create_index.py            # OpenSearch index mappings
+  download_sec.sh            # sample SEC download
 eval/
-  run_eval.py                # CIM/MQS/KC/latency/stability metrics
+  run_eval.py                # metrics + summary
 docs/
-  arch.png                   # architecture PNG
+  arch.png                   # architecture diagram
 .env.example
 README.md
-Roadmap
-Multi-doc ranking + deduped quotes
+```
 
-Smarter query parsing (ticker/year inference & keyword boosts)
+---
 
-Streaming responses (SSE) via API Gateway
+## Roadmap
 
-Optional auth (API key or Cognito) for demos
+- Multi-document ranking and duplicate-quote suppression
+- Query parsing improvements (ticker/year inference)
+- Streaming responses (SSE) via API Gateway
+- Optional auth (API key or Cognito) for demos
+- Simple dashboard (latency, cache hit rate, spend)
 
-Simple dashboard (latency, cache hit-rate, spend)
+---
 
-License
+## License
+
 MIT
