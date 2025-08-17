@@ -1,67 +1,215 @@
-# SEC Filings RAG Copilot (serverless, low-cost)
+# SEC Filings RAG Copilot
 
-A production-style Retrieval-Augmented Generation (RAG) system that ingests 10-K/10-Q filings and answers questions with citations.
+Turn dense SEC filings into **instant, cited answers**. A low-cost, serverless Retrieval-Augmented Generation (RAG) system that ingests 10-K/10-Q PDFs, indexes them, and serves a **public `/chat` API** with grounded citations. Built to showcase **end-to-end product thinking**, **cost discipline**, and a **modern AWS stack**.
 
-**Stack**: AWS S3, Step Functions, Lambda, Bedrock Titan Embeddings, OpenSearch, DynamoDB TTL Cache, API Gateway
+---
 
-**Architecture:**
-```mermaid
-flowchart LR
+## Highlights
 
-%% ---------------- Ingest (batch & offline) ----------------
-subgraph IN["Ingest (batch & offline)"]
-  S3["S3: 10-K / 10-Q PDFs"]
-  SF["Step Functions"]
-  EC["Lambda: extract & clean"]
-  CE["Lambda: chunk & embed"]
-  EMB["Bedrock Titan Embeddings"]
-  OS["OpenSearch kNN index"]
+- **Production-style RAG:** S3 → Step Functions → Lambda → Bedrock Titan Embeddings → OpenSearch (k-NN) → API Gateway → Router Lambda → Bedrock Text (primary + fallback).
+- **Grounded answers:** quotes-only format with **explicit citations** like `[AAPL 2023 10-K — Item 1A]`.
+- **Cost control:** **DynamoDB TTL cache** for answers (query-hash keyed) to minimize LLM calls; small `k`, modest `max_tokens`, light models.
+- **Clean outputs:** router enforces `<final>…</final>` and strips prompt echos/system tokens.
 
-  S3 -->|1 new filing| SF
-  SF -->|2 extract| EC
-  EC -->|3 chunks| CE
-  CE -->|4 embed| EMB
-  EMB -->|5 vectors| OS
-end
+---
 
-%% ---------------- Serve (real-time /chat) ----------------
-subgraph SV["Serve (real-time chat)"]
-  API["API Gateway: POST /chat"]
-  RT["Lambda: chat-router"]
-  DDB["DynamoDB cache (TTL)"]
-  BRP["Bedrock Text (primary)"]
-  BRF["Bedrock Text (fallback)"]
+## Architecture
 
-  API -->|request| RT
-  RT -->|A kNN retrieve| OS
-  RT -->|B cache get/set| DDB
-  RT -->|C generate| BRP
-  RT -.->|C' fallback| BRF
-  RT -->|response| API
-end
+> PNG (no Mermaid needed). Put/keep the image at `docs/arch.png`.
 
-%% ---------------- Styling ----------------
-classDef store  fill:#F0F7FF,stroke:#4A90E2,stroke-width:1px;
-classDef compute fill:#FFF7E6,stroke:#F5A623,stroke-width:1px;
-classDef model  fill:#F0FFF4,stroke:#27AE60,stroke-width:1px;
-classDef edge   fill:#F8F9FA,stroke:#6C757D,stroke-dasharray:3 3,stroke-width:1px;
+<p align="center">
+  <img src="docs/arch.png" alt="Architecture diagram: Ingest and Serve paths" width="840">
+</p>
 
-class S3,OS,DDB store
-class SF,EC,CE,RT compute
-class EMB,BRP,BRF model
-class API edge
+**Ingest (batch/offline)**  
+S3 (filings) → Step Functions → `extract_clean` Lambda (parse/clean) → `chunk_embed` Lambda (chunk + **Titan Embeddings**) → **OpenSearch** (k-NN index)
+
+**Serve (online)**  
+API Gateway (`POST /chat`) → `router` Lambda → **OpenSearch** (retrieve) → **Bedrock Text** (primary + fallback) → **DynamoDB** cache (TTL)
+
+---
+
+## Stack
+
+- **AWS:** S3, Step Functions, Lambda (Python 3.11), API Gateway (HTTP API v2), DynamoDB (TTL), Bedrock (Titan Embeddings + Text provider), OpenSearch (k-NN)
+- **Python:** minimal deps; retrieval helpers in `app_code/langgraph_app/`
+- **Data:** SEC 10-K/10-Q
+- **Eval:** `eval/run_eval.py` (CIM, MQS, KC, latency, stability)
+
+---
+
+## Quickstart (local operator notes)
+
+1) **Configure environment** (never commit real values):
+```bash
+cp .env.example .env
+# edit .env with your endpoints/IDs/region, then:
+export $(grep -v '^#' .env | xargs)
 ```
 
-Features:
+2) Create OpenSearch index:
+```bash
+python3 scripts/create_index.py
+```
 
-Low-cost, serverless RAG on AWS
+3) Download + ingest a few filings:
 
-DynamoDB cache to reduce LLM calls
+```bash
+bash scripts/download_sec.sh    # writes to your S3 bucket
+# Deploy/attach Step Functions to run extract_clean → chunk_embed for embeddings
+```
 
-Public API Gateway endpoint
+4) Serve the API (Router Lambda + API Gateway):
+- lambdas/router/app.py (uses env vars below)
+- API Gateway route POST /chat → Router Lambda
+- DynamoDB table (e.g., sec_copilot_cache) with TTL on ttl
 
-Easily extensible to other document sets
+5) Smoke test:
+```bash
+# API_URL should look like: https://<api-id>.execute-api.<region>.amazonaws.com
+curl -s -X POST "${API_URL%/}/chat" \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"Where does Apple discuss supply-chain risk?"}' | jq .
+```
 
-Deployment
-See DEPLOY.md for AWS setup instructions.
+---
 
+## Configuration (Lambda env vars)
+
+| Variable | Example | Purpose |
+|---|---|---|
+| OPENSEARCH_ENDPOINT | search-xxxxx.us-east-2.es.amazonaws.com | OpenSearch domain host (no scheme). |
+| OPENSEARCH_INDEX | kb_chunks | Name of the k-NN index. |
+| BEDROCK_EMBED_MODEL_ID | amazon.titan-embed-text-v2:0 | Embedding model for chunk vectors. |
+| BEDROCK_TEXT_MODEL_ID | anthropic.claude-3-haiku-20240307-v1:0 | Primary text model for answers. |
+| BEDROCK_TEXT_MODEL_FALLBACK_ID | meta.llama3-3-70b-instruct-v1:0 | Fallback text model. |
+| CACHE_TABLE | sec_copilot_cache | DynamoDB cache table (TTL enabled on "ttl"). |
+| AWS_REGION | us-east-2 | Region for Bedrock/OpenSearch/DynamoDB. |
+
+---
+
+## API
+
+**Endpoint:** `POST /chat`  
+**Returns:** One-sentence answer + 2-3 quoted bullets with SEC citations.
+
+**Request**
+```json
+{ "query": "Where does Apple discuss supply-chain risk?" }
+```
+
+**Response (example)**
+```json
+{
+  "answer": "Apple discusses supply-chain risk in Item 1A (Risk Factors) and references in Item 8 notes.\n* ... [AAPL 2023 10-K - Item 1A]\n* ... [AAPL 2023 10-K - Item 8]"
+}
+```
+
+**cURL smoke test**
+```bash
+# API_URL should look like: https://<api-id>.execute-api.<region>.amazonaws.com
+curl -s -X POST "${API_URL%/}/chat"   -H 'Content-Type: application/json'   -d '{"query":"Where does Apple discuss supply-chain risk?"}' | jq .
+```
+
+---
+
+## Architecture
+
+![Architecture](docs/arch.png)
+
+Ingest (batch/offline): S3 -> Step Functions -> Lambda (extract + chunk + embed) -> Bedrock Titan Embeddings -> OpenSearch (kNN).  
+Serve (real-time): API Gateway -> Lambda router -> OpenSearch retrieve -> Bedrock (primary/fallback) -> DynamoDB cache (TTL).
+
+---
+
+## Evaluation (latest)
+
+Low-cost eval across AAPL/MSFT/AMZN 2023 10-Ks (12 questions total; ~50% repeats leverage cache).
+
+### Overall
+| Metric | Value |
+|---|---|
+| N (questions) | 12 |
+| Repeats | 4 |
+| CIM@Item (accuracy) | 0.833 |
+| MQS@2+ quotes | 0.917 |
+| KC@keywords (avg) | 0.931 |
+| Latency p50 / p95 (ms) | 2271 / 3106 |
+| Stability (avg) | 0.732 |
+
+### Per filing
+| Filing | N | CIM | MQS | KC | p50 (ms) |
+|---|---|---|---|---|---|
+| AAPL 2023 10-K | 4 | 1.00 | 0.75 | 1.000 | 1891 |
+| MSFT 2023 10-K | 4 | 0.75 | 1.00 | 0.917 | 2244 |
+| AMZN 2023 10-K | 4 | 0.75 | 1.00 | 0.875 | 2693 |
+
+**Reproduce locally**
+```bash
+# Single-ticker sample (6 questions)
+python3 eval/run_eval.py "$API_URL" eval/questions.jsonl --repeat
+
+# Multi-ticker (12 questions, ~50% repeats for cache savings)
+python3 eval/run_eval.py "$API_URL" eval/questions_multi.jsonl --repeat --repeat-frac 0.5
+```
+
+**Metric definitions**
+- CIM (Citation-Item Match): any cited bracket includes the expected Item label (for example, "Item 1A").
+- MQS (Minimum Quote Support): answer includes at least 2 quoted bullets.
+- KC (Keyword Coverage): fraction of expected keywords present in the answer.
+- Stability: token-set similarity between first and repeated answers.
+
+---
+
+## Cost story
+
+- Serverless, pay-per-request architecture.
+- DynamoDB cache with TTL cuts repeat LLM calls to near-zero.
+- Efficient primary model with fallback only on failure or low confidence.
+- OpenSearch dev-sized domain; scale shards/replicas only when required.
+- Titan Embeddings v2; chunk size ~500-800 tokens with small overlap.
+
+---
+
+## Security and privacy
+
+- No secrets in repo; use `.env` locally and Lambda environment variables in AWS.
+- Repo sanitized (IDs/ARNs redacted). Optional scans with `trufflehog`.
+- Data stays within your AWS account (Bedrock, OpenSearch, DynamoDB).
+
+---
+
+## Repository layout
+
+```
+app_code/langgraph_app/      # retrieval helpers (search, prompts)
+lambdas/
+  extract_clean/app.py       # parse & clean filings
+  chunk_embed/app.py         # chunk + embeddings -> OpenSearch
+  router/app.py              # /chat: retrieval + generation + cache
+scripts/
+  create_index.py            # OpenSearch index mappings
+  download_sec.sh            # sample SEC download
+eval/
+  run_eval.py                # metrics + summary
+docs/
+  arch.png                   # architecture diagram
+.env.example
+README.md
+```
+
+---
+
+## Roadmap
+
+- Multi-document ranking and duplicate-quote suppression
+- Query parsing improvements (ticker/year inference)
+- Streaming responses (SSE) via API Gateway
+- Optional auth (API key or Cognito) for demos
+- Simple dashboard (latency, cache hit rate, spend)
+
+---
+
+## License
+
+MIT
