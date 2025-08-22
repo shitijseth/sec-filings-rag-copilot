@@ -15,10 +15,8 @@ Turn dense SEC filings into **instant, cited answers**. A low-cost, serverless R
 
 ## Architecture
 
-> PNG (no Mermaid needed). Put/keep the image at `docs/arch.png`.
-
 <p align="center">
-  <img src="docs/arch.png" alt="Architecture diagram: Ingest and Serve paths" width="840">
+  <img src="docs/sec_copilot_rag_architecture.jpg" alt="Architecture diagram: Ingest and Serve paths" width="840">
 </p>
 
 **Ingest (batch/offline)**  
@@ -110,15 +108,6 @@ curl -s -X POST "${API_URL%/}/chat" \
 # API_URL should look like: https://<api-id>.execute-api.<region>.amazonaws.com
 curl -s -X POST "${API_URL%/}/chat"   -H 'Content-Type: application/json'   -d '{"query":"Where does Apple discuss supply-chain risk?"}' | jq .
 ```
-
----
-
-## Architecture
-
-![Architecture](docs/arch.png)
-
-Ingest (batch/offline): S3 -> Step Functions -> Lambda (extract + chunk + embed) -> Bedrock Titan Embeddings -> OpenSearch (kNN).  
-Serve (real-time): API Gateway -> Lambda router -> OpenSearch retrieve -> Bedrock (primary/fallback) -> DynamoDB cache (TTL).
 
 ---
 
